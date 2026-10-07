@@ -120,6 +120,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--navy); }
 .add-hours { display: inline-flex; gap: 4px; }
 .add-hours input { width: 58px !important; }
 .row-done td { color: var(--muted); }
+.skip-note { font-size: 12px; font-style: italic; }
 
 /* Settings */
 .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; align-items: start; }

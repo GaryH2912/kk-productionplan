@@ -37,29 +37,42 @@ export function addWorkdays(d, n) {
 
 // Hours used for scheduling: finished phases use actual hours; open phases use
 // the estimate, or actual hours if they have already run over the estimate.
+// A phase with 0 hours (e.g. no coating) is skipped and takes no time.
 export function scheduleHours(p) {
-  if (p.done) return Math.max(Number(p.actual) || 0, 0.5);
+  if (p.done) return Number(p.actual) || 0;
   return Math.max(Number(p.est) || 0, Number(p.actual) || 0);
 }
 
+export const isSkipped = (p) => scheduleHours(p) <= 0;
+
+// Phases run back to back in working hours, so the next phase starts as soon as the
+// previous one's hours run out (possibly the same day). Changing any phase's hours
+// moves every later phase and the finish date.
 export function scheduleBoat(boat, settings) {
-  let cursor = parseISO(boat.startDate);
+  const hpd = Number(settings.hoursPerDay) || 8;
+  const base = nextWorkday(parseISO(boat.startDate));
+  const EPS = 1e-9;
+  let offset = 0; // working hours elapsed since the start date
+  let finish = base;
   const phases = {};
   for (const ph of PHASES) {
-    const p = boat.phases[ph.key];
-    const hrs = scheduleHours(p);
-    const days = Math.max(1, Math.ceil(hrs / (Number(settings.hoursPerDay) || 8)));
-    const start = nextWorkday(cursor);
-    const end = addWorkdays(start, days);
-    phases[ph.key] = { start, end, days, hrs };
-    cursor = new Date(end);
-    cursor.setDate(cursor.getDate() + 1);
+    const hrs = scheduleHours(boat.phases[ph.key]);
+    if (hrs <= 0) {
+      phases[ph.key] = { skipped: true, hrs: 0, days: 0 };
+      continue;
+    }
+    const firstDay = Math.floor(offset / hpd);
+    const lastDay = Math.floor((offset + hrs - EPS) / hpd);
+    const start = addWorkdays(base, firstDay + 1);
+    const end = addWorkdays(base, lastDay + 1);
+    phases[ph.key] = { start, end, days: lastDay - firstDay + 1, hrs };
+    offset += hrs;
+    finish = end;
   }
-  const finish = phases.fitout.end;
   const late = boat.targetDate ? finish > parseISO(boat.targetDate) : false;
   const est = PHASES.reduce((t, ph) => t + (Number(boat.phases[ph.key].est) || 0), 0);
   const actual = PHASES.reduce((t, ph) => t + (Number(boat.phases[ph.key].actual) || 0), 0);
-  const current = PHASES.find((ph) => !boat.phases[ph.key].done);
+  const current = PHASES.find((ph) => !boat.phases[ph.key].done && !phases[ph.key].skipped);
   return { phases, finish, late, est, actual, current };
 }
 
@@ -79,7 +92,7 @@ export function bayConflicts(boats, scheds) {
   const clash = new Set();
   for (const ph of PHASES) {
     const items = boats
-      .filter((b) => !b.phases[ph.key].done)
+      .filter((b) => !b.phases[ph.key].done && !scheds[b.id].phases[ph.key].skipped)
       .map((b) => ({ id: b.id, bay: b.phases[ph.key].bay || 1, ...scheds[b.id].phases[ph.key] }));
     for (let i = 0; i < items.length; i++) {
       for (let j = i + 1; j < items.length; j++) {

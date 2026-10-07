@@ -149,7 +149,7 @@ export default function App() {
                   badge: s.late ? <span className="badge late">Late</span> : null,
                   marker: b.targetDate ? parseISO(b.targetDate) : null,
                   onClick: () => setEditing(structuredClone(b)),
-                  bars: PHASES.map((ph) => barFor(b, ph, s, conflicts, state.settings, () => setEditing(structuredClone(b)))),
+                  bars: PHASES.filter((ph) => !s.phases[ph.key].skipped).map((ph) => barFor(b, ph, s, conflicts, state.settings, () => setEditing(structuredClone(b)))),
                 };
               })}
             />
@@ -165,7 +165,7 @@ export default function App() {
                 key: `${phase.key}-${bay}`,
                 label,
                 bars: active
-                  .filter((b) => (b.phases[phase.key].bay || 1) === bay)
+                  .filter((b) => (b.phases[phase.key].bay || 1) === bay && !scheds[b.id].phases[phase.key].skipped)
                   .map((b) => ({
                     ...barFor(b, phase, scheds[b.id], conflicts, state.settings, () => setEditing(structuredClone(b))),
                     text: `${b.model} · ${b.customer || ''}`,
@@ -279,14 +279,14 @@ function BoatTable({ boats, scheds, onEdit }) {
   );
 }
 
-function HoursView({ boats, settings, update }) {
+function HoursView({ boats, scheds, settings, update }) {
   if (!boats.length) return <p className="hint">No boats in build.</p>;
   const setPhase = (id, key, patch) =>
     update((s) => { Object.assign(s.boats.find((b) => b.id === id).phases[key], patch); });
 
   return (
     <>
-      <p className="hint">Enter actual hours spent against each phase. Tick “Done” when a phase is finished — the schedule then uses actual hours and moves the next phase up.</p>
+      <p className="hint">Enter actual hours spent against each phase. Tick “Done” when a phase is finished — the schedule then uses actual hours and moves the next phase up. A phase not needed on a boat (e.g. no coating) can be set to 0 estimated hours on the boat’s edit screen and is skipped.</p>
       <div className="hours-grid">
         {boats.map((b) => (
           <div className="hours-card" key={b.id}>
@@ -302,9 +302,10 @@ function HoursView({ boats, settings, update }) {
                 {PHASES.map((ph) => {
                   const p = b.phases[ph.key];
                   const over = p.actual > p.est;
+                  const skipped = scheds[b.id].phases[ph.key].skipped;
                   return (
-                    <tr key={ph.key} className={p.done ? 'row-done' : ''}>
-                      <td><i className="dot" style={{ background: ph.color }} />{ph.short}</td>
+                    <tr key={ph.key} className={p.done || skipped ? 'row-done' : ''}>
+                      <td><i className="dot" style={{ background: ph.color }} />{ph.short}{skipped && <span className="skip-note"> – not required</span>}</td>
                       <td>{(settings.bays[ph.key] || 1) > 1 ? p.bay || 1 : '–'}</td>
                       <td className="num">{p.est}</td>
                       <td className="num">
@@ -491,7 +492,7 @@ function BoatEditor({ boat, state, isNew, onSave, onCancel, onArchive, onDelete 
                   <td className="num"><input type="number" min="0" value={p.est} onChange={(e) => setPhase(ph.key, { est: Math.max(0, Number(e.target.value) || 0) })} /></td>
                   <td className="num"><input type="number" min="0" step="0.5" value={p.actual} onChange={(e) => setPhase(ph.key, { actual: Math.max(0, Number(e.target.value) || 0) })} /></td>
                   <td><input type="checkbox" checked={p.done} onChange={(e) => setPhase(ph.key, { done: e.target.checked })} /></td>
-                  <td className="muted">{fmt(sp.start)} → {fmt(sp.end)}</td>
+                  <td className="muted">{sp.skipped ? 'Not required (0 hrs)' : `${fmt(sp.start)} → ${fmt(sp.end)}`}</td>
                 </tr>
               );
             })}
