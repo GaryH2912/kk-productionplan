@@ -17,7 +17,7 @@ export const DEFAULT_MODELS = [
 
 export const DEFAULT_SETTINGS = {
   hoursPerDay: 8, // productive hours per bay per working day
-  bays: { precnc: 1, fabrication: 2, coatings: 1, fitout: 2 },
+  bays: { precnc: 1, fabrication: 4, coatings: 1, fitout: 2 },
   split: { precnc: 10, fabrication: 45, coatings: 10, fitout: 35 }, // % of model hours per phase
 };
 

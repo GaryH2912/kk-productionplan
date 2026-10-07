@@ -20,32 +20,54 @@ export default function App() {
   const [tab, setTab] = useState('schedule');
   const [editing, setEditing] = useState(null); // boat object being edited
   const dirty = useRef(false);
+  const stateRef = useRef(null); // latest state, read by the saver
+  const baseRef = useRef(null); // version of the plan last loaded from / saved to the server
+  const saving = useRef(false);
+  const pending = useRef(false);
+  stateRef.current = state;
 
   const load = async () => {
     const { data, remote } = await loadData();
     dirty.current = false;
+    baseRef.current = data?.savedAt ?? null;
     setState(data || DEFAULT_STATE);
     setStatus(remote ? `Up to date · ${clock()}` : 'Offline – changes saved on this device only');
   };
   useEffect(() => { load(); }, []);
 
+  // One save at a time; changes made while a save is in progress are sent straight after it.
+  const flush = async () => {
+    if (saving.current) { pending.current = true; return; }
+    saving.current = true;
+    pending.current = false;
+    setStatus('Saving…');
+    const r = await saveData(stateRef.current, baseRef.current);
+    saving.current = false;
+    if (r.conflict) {
+      pending.current = false;
+      dirty.current = false;
+      baseRef.current = r.current?.savedAt ?? null;
+      alert('This plan was changed from another computer since you opened it. Loading the latest version — please re-enter your last change.');
+      setState(r.current);
+      setStatus(`Reloaded latest · ${clock()}`);
+      return;
+    }
+    if (r.ok) {
+      baseRef.current = r.savedAt;
+      setStatus(`Saved · ${clock()}`);
+    } else {
+      setStatus('Offline – changes saved on this device only');
+    }
+    if (pending.current) flush();
+  };
+
   // Autosave shortly after any change
   useEffect(() => {
     if (!state || !dirty.current) return;
     setStatus('Saving…');
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => {
       dirty.current = false;
-      const r = await saveData(state);
-      if (r.conflict) {
-        alert('This plan was changed from another computer since you opened it. Loading the latest version — please re-enter your last change.');
-        setState(r.current);
-        setStatus(`Reloaded latest · ${clock()}`);
-      } else if (r.ok) {
-        setState((s) => ({ ...s, savedAt: r.savedAt }));
-        setStatus(`Saved · ${clock()}`);
-      } else {
-        setStatus('Offline – changes saved on this device only');
-      }
+      flush();
     }, 800);
     return () => clearTimeout(t);
   }, [state]);

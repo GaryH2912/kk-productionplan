@@ -5,7 +5,8 @@
 import { getStore } from '@netlify/blobs';
 
 export default async (req) => {
-  const store = getStore('kk-planner');
+  // Strong consistency: always read the very latest save (the default can lag behind by a few seconds).
+  const store = getStore({ name: 'kk-planner', consistency: 'strong' });
   const current = await store.get('state', { type: 'json' });
 
   if (req.method === 'GET') {

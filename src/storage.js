@@ -18,7 +18,7 @@ export async function loadData() {
 }
 
 // Returns { ok, savedAt } | { conflict, current } | { offline }
-export async function saveData(state, retried = false) {
+export async function saveData(state, baseSavedAt, retried = false) {
   safe(() => localStorage.setItem(CACHE, JSON.stringify(state)));
   try {
     const r = await fetch('/api/data', {
@@ -27,13 +27,13 @@ export async function saveData(state, retried = false) {
         'content-type': 'application/json',
         'x-edit-pin': safe(() => localStorage.getItem(PIN), '') || '',
       },
-      body: JSON.stringify({ data: state, baseSavedAt: state.savedAt }),
+      body: JSON.stringify({ data: state, baseSavedAt }),
     });
     if (r.status === 401 && !retried) {
       const pin = window.prompt('Enter the edit PIN to save changes:');
       if (pin) {
         safe(() => localStorage.setItem(PIN, pin));
-        return saveData(state, true);
+        return saveData(state, baseSavedAt, true);
       }
     }
     if (r.status === 409) return { conflict: true, current: await r.json() };
